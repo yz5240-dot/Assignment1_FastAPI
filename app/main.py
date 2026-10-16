@@ -1,14 +1,15 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.bigram_model import BigramModel
 from app.embedding_model import calculate_embedding
+from app.inference import ImageClassifier
 
 
 app = FastAPI(
-    title="Assignment 1 FastAPI",
-    description="Text generation and word embedding API",
+    title="Assignment 2 CNN FastAPI",
+    description="Text generation, word embeddings, and CIFAR-10 image classification",
     version="1.0.0"
 )
 
@@ -61,3 +62,21 @@ def get_embedding(request: EmbeddingRequest):
         "word": request.word,
         "embedding": embedding
     }
+
+
+image_classifier = ImageClassifier()
+
+
+@app.post("/predict")
+async def predict_image(file: UploadFile = File(...)):
+    if not image_classifier.available:
+        raise HTTPException(status_code=503, detail="Model not trained yet. Run train.py and save models/cnn_cifar10.pth")
+    if file.content_type is not None and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Please upload an image file")
+    data = await file.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (max 10MB)")
+    try:
+        return image_classifier.predict(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
